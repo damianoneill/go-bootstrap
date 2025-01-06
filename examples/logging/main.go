@@ -70,9 +70,7 @@ func main() {
 		panic(err)
 	}
 
-	logger.Info("Starting service", domainlog.Fields{
-		"startup_time": time.Now().Format(time.RFC3339),
-	})
+	logger.Info("Starting service")
 
 	fmt.Println("\n=== Example 2: Logger with both domain and Zap options ===")
 	zapLogger, err := factory.NewLoggerWithOptions(
@@ -88,7 +86,7 @@ func main() {
 		panic(err)
 	}
 
-	zapLogger.Debug("Configuration loaded", domainlog.Fields{
+	zapLogger.DebugWith("Configuration loaded", domainlog.Fields{
 		"config_path": "/etc/config.yaml",
 		"debug_mode":  true,
 	})
@@ -99,7 +97,7 @@ func main() {
 		"user_id":    "user123",
 	})
 
-	requestLogger.Info("Processing request", domainlog.Fields{
+	requestLogger.InfoWith("Processing request", domainlog.Fields{
 		"path":   "/api/v1/users",
 		"method": "GET",
 	})
@@ -114,26 +112,26 @@ func main() {
 	defer span.End()
 
 	traceLogger := logger.WithContext(ctx)
-	traceLogger.Info("Executing traced operation", domainlog.Fields{
+	traceLogger.InfoWith("Executing traced operation", domainlog.Fields{
 		"operation": "database_query",
 		"table":     "users",
 	})
 
 	fmt.Println("\n=== Example 5: Different log levels ===")
-	logger.Debug("Debug message", nil)
-	logger.Info("Info message", nil)
-	logger.Warn("Warning message", domainlog.Fields{
+	logger.Debug("Debug message")
+	logger.Info("Info message")
+	logger.WarnWith("Warning message", domainlog.Fields{
 		"attention_level": "medium",
 	})
-	logger.Error("Error occurred", domainlog.Fields{
+	logger.ErrorWith("Error occurred", domainlog.Fields{
 		"error_code": 500,
 		"error_msg":  "database connection failed",
 	})
 
 	fmt.Println("\n=== Example 6: Changing log levels dynamically ===")
 	zapLogger.SetLevel(domainlog.WarnLevel)
-	zapLogger.Debug("This won't be logged", nil)
-	zapLogger.Warn("This will be logged", nil)
+	zapLogger.Debug("This won't be logged")
+	zapLogger.Warn("This will be logged")
 
 	fmt.Println("\n=== Example 7: Complex tracing scenario ===")
 	// Create new trace context
@@ -141,14 +139,14 @@ func main() {
 	defer rootSpan.End()
 
 	rootLogger := logger.WithContext(ctx)
-	rootLogger.Info("Starting complex operation", nil)
+	rootLogger.Info("Starting complex operation")
 
 	// Create child span
 	ctx, childSpan := tracer.Start(ctx, "child-operation")
 	defer childSpan.End()
 
 	childLogger := logger.WithContext(ctx)
-	childLogger.Info("Processing child operation", domainlog.Fields{
+	childLogger.InfoWith("Processing child operation", domainlog.Fields{
 		"operation_type": "database-query",
 		"query_params": domainlog.Fields{
 			"table": "users",
@@ -162,10 +160,10 @@ func main() {
 
 	select {
 	case <-signalChan:
-		logger.Info("Received shutdown signal", nil)
+		logger.Info("Received shutdown signal")
 	case <-ctx.Done():
-		logger.Info("Context canceled", nil)
+		logger.Info("Context canceled")
 	case <-time.After(2 * time.Second):
-		logger.Info("Example completed", nil)
+		logger.Info("Example completed")
 	}
 }

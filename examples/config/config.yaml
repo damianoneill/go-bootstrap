@@ -1,0 +1,45 @@
+# examples/config/config.yaml
+server:
+  http:
+    host: "localhost"
+    port: 8080
+    read_timeout: "5s"
+    write_timeout: "10s"
+    shutdown_timeout: "30s"
+    tls:
+      enabled: true
+      cert_file: "/etc/certs/server.crt"
+      key_file: "/etc/certs/server.key"
+
+database:
+  host: "localhost"
+  port: 5432
+  name: "myapp"
+  user: "admin"
+  password: "secret"
+  pool:
+    max_open: 10
+    max_idle: 5
+    max_lifetime: "1h"
+
+logging:
+  level: "info"
+  format: "json"
+  output: "stdout"
+
+metrics:
+  enabled: true
+  path: "/metrics"
+  collection_interval: "15s"
+
+tracing:
+  enabled: true
+  endpoint: "http://jaeger:14268/api/traces"
+  sample_rate: 0.1
+
+features:
+  beta:
+    - "new_ui"
+    - "graphql_api"
+  experimental:
+    - "websocket_support"

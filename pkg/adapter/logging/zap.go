@@ -141,20 +141,37 @@ func (f *Factory) createLogger(zopts ZapOptions) (domainlog.LeveledLogger, error
 	}, nil
 }
 
-func (l *ZapLogger) Info(msg string, fields domainlog.Fields) {
-	l.logger.Info(msg, convertFields(fields)...)
+func (l *ZapLogger) Debug(msg string) {
+	l.logger.Debug(msg)
 }
 
-func (l *ZapLogger) Error(msg string, fields domainlog.Fields) {
-	l.logger.Error(msg, convertFields(fields)...)
+func (l *ZapLogger) Info(msg string) {
+	l.logger.Info(msg)
 }
 
-func (l *ZapLogger) Debug(msg string, fields domainlog.Fields) {
+func (l *ZapLogger) Warn(msg string) {
+	l.logger.Warn(msg)
+}
+
+func (l *ZapLogger) Error(msg string) {
+	l.logger.Error(msg)
+}
+
+// Implementation of methods with fields
+func (l *ZapLogger) DebugWith(msg string, fields domainlog.Fields) {
 	l.logger.Debug(msg, convertFields(fields)...)
 }
 
-func (l *ZapLogger) Warn(msg string, fields domainlog.Fields) {
+func (l *ZapLogger) InfoWith(msg string, fields domainlog.Fields) {
+	l.logger.Info(msg, convertFields(fields)...)
+}
+
+func (l *ZapLogger) WarnWith(msg string, fields domainlog.Fields) {
 	l.logger.Warn(msg, convertFields(fields)...)
+}
+
+func (l *ZapLogger) ErrorWith(msg string, fields domainlog.Fields) {
+	l.logger.Error(msg, convertFields(fields)...)
 }
 
 func (l *ZapLogger) With(fields domainlog.Fields) domainlog.Logger {

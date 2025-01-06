@@ -56,10 +56,18 @@ func WithFields(fields Fields) Option {
 
 // Logger defines the core logging interface
 type Logger interface {
-	Info(msg string, fields Fields)
-	Error(msg string, fields Fields)
-	Debug(msg string, fields Fields)
-	Warn(msg string, fields Fields)
+	// Methods without fields for common case
+	Debug(msg string)
+	Info(msg string)
+	Warn(msg string)
+	Error(msg string)
+	// Methods with fields for detailed logging
+	DebugWith(msg string, fields Fields)
+	InfoWith(msg string, fields Fields)
+	WarnWith(msg string, fields Fields)
+	ErrorWith(msg string, fields Fields)
+
+	// Context methods
 	With(fields Fields) Logger
 	WithContext(ctx context.Context) Logger
 }
@@ -76,7 +84,7 @@ type RuntimeConfigurable interface {
 	GetConfigHandler() http.Handler
 }
 
-// LoggerFactory creates new logger instances
-type LoggerFactory interface {
+// Factory creates new logger instances
+type Factory interface {
 	NewLogger(opts ...Option) (LeveledLogger, error)
 }
