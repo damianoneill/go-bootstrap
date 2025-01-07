@@ -1,0 +1,16 @@
+# examples/quickstart/config.yaml
+server:
+  http:
+    port: 8080
+    read_timeout: 15s
+    write_timeout: 15s
+    shutdown_timeout: 15s
+
+logging:
+  level: info
+  format: json
+
+tracing:
+  enabled: false
+  endpoint: "" # Set via OTEL_EXPORTER_OTLP_ENDPOINT
+  sample_rate: 1.0
