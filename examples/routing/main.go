@@ -44,6 +44,12 @@ func printExampleRequests() {
 	fmt.Println("\n# Startup probe")
 	fmt.Println("curl -v http://localhost:8080/internal/startup")
 
+	fmt.Println("\n=== Logging Configuration Endpoint (if supported) ===")
+	fmt.Println("# Get current log level")
+	fmt.Println("curl -v http://localhost:8080/internal/logging/config")
+	fmt.Println("\n# Update log level")
+	fmt.Println(`curl -v -X PUT -H "Content-Type: application/json" -d '{"level":"debug"}' http://localhost:8080/internal/logging/config`)
+
 	fmt.Println("\n=== Observability Endpoints (excluded from tracing & logging) ===")
 	fmt.Println("# Prometheus metrics")
 	fmt.Println("curl -v http://localhost:8080/metrics")

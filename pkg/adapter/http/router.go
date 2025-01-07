@@ -88,8 +88,8 @@ func (r *ChiRouter) configure() error {
 	// Add metrics collection
 	r.Use(r.metricsMiddleware())
 
-	// Configure probes
-	r.Mount("/internal", r.probeRoutes())
+	// Configure internal routes
+	r.Mount("/internal", r.internalRouters())
 
 	// Add metrics endpoint
 	r.Handle("/metrics", promhttp.Handler())
@@ -97,23 +97,35 @@ func (r *ChiRouter) configure() error {
 	return nil
 }
 
-// probeRoutes creates a router with probe endpoints
-func (r *ChiRouter) probeRoutes() chi.Router {
-	probes := chi.NewRouter()
+// internalRouters creates a router with probe endpoints
+func (r *ChiRouter) internalRouters() chi.Router {
+	internal := chi.NewRouter()
 
-	probes.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
+	internal.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		r.handleProbe(w, r.opts.ProbeHandlers.LivenessCheck())
 	})
 
-	probes.Get("/ready", func(w http.ResponseWriter, _ *http.Request) {
+	internal.Get("/ready", func(w http.ResponseWriter, _ *http.Request) {
 		r.handleProbe(w, r.opts.ProbeHandlers.ReadinessCheck())
 	})
 
-	probes.Get("/startup", func(w http.ResponseWriter, _ *http.Request) {
+	internal.Get("/startup", func(w http.ResponseWriter, _ *http.Request) {
 		r.handleProbe(w, r.opts.ProbeHandlers.StartupCheck())
 	})
 
-	return probes
+	// Add logger config endpoint if logger supports runtime configuration
+	if r.opts.Logger != nil {
+		if configurable, ok := r.opts.Logger.(logging.RuntimeConfigurable); ok {
+			internal.Handle("/logging/config", configurable.GetConfigHandler())
+			if r.opts.Logger != nil {
+				r.opts.Logger.InfoWith("Registered logger config endpoint", logging.Fields{
+					"path": "/internal/logging/config",
+				})
+			}
+		}
+	}
+
+	return internal
 }
 
 // handleProbe writes a probe response with appropriate status code
