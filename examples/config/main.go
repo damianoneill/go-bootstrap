@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"os"
@@ -111,41 +110,18 @@ func main() {
 		cfg.Database.Pool.MaxOpen,
 		cfg.Database.Pool.MaxIdle)
 
-	fmt.Println("\n=== Example 4: Using Watch for config changes ===")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Type assert to check if store supports watching
-	watcher, ok := store.(domainconfig.Watcher)
-	if !ok {
-		log.Fatal("store does not support watching")
-	}
-
-	changes, err := watcher.Watch(ctx, "server.http.port")
-	if err != nil {
-		log.Fatalf("Failed to watch config: %v", err)
-	}
-
-	go func() {
-		for value := range changes {
-			if port, ok := value.(int); ok {
-				fmt.Printf("Server port changed to: %d\n", port)
-			}
-		}
-	}()
-
-	fmt.Println("\n=== Example 5: Feature flags ===")
+	fmt.Println("\n=== Example 4: Feature flags ===")
 	if features, ok := store.GetStringSlice("features.beta"); ok {
 		fmt.Printf("Beta features enabled: %v\n", features)
 	}
 
-	fmt.Println("\n=== Example 6: Environment variables override ===")
+	fmt.Println("\n=== Example 5: Environment variables override ===")
 	os.Setenv("APP_SERVER_HTTP_PORT", "9090")
 	if port, ok := store.GetInt("server.http.port"); ok {
 		fmt.Printf("Server port from env: %d\n", port)
 	}
 
-	fmt.Println("\n=== Example 7: Validate configuration ===")
+	fmt.Println("\n=== Example 6: Validate configuration ===")
 	if err := validateConfig(cfg); err != nil {
 		log.Fatalf("Invalid configuration: %v", err)
 	}
@@ -158,8 +134,6 @@ func main() {
 	select {
 	case <-sigChan:
 		fmt.Println("Received shutdown signal")
-	case <-ctx.Done():
-		fmt.Println("Context canceled")
 	case <-time.After(10 * time.Second):
 		fmt.Println("Example completed")
 	}

@@ -35,7 +35,6 @@ help: ## Display this help message
 clean: ## Clean build artifacts and generated code
 	@echo "Cleaning build artifacts and generated code..."
 	@rm -rf $(DIST_DIR)
-	@rm -rf pkg/domain/mocks
 	@find . -type f -name '*.test' -delete
 	@find . -type f -name 'coverage.out' -delete
 	@find . -type f -name 'coverage.html' -delete
@@ -45,7 +44,6 @@ dirs: ## Create required directories
 	@echo "Creating required directories..."
 	@mkdir -p $(COVERAGE_DIR)
 	@mkdir -p $(EXAMPLES_DIR)
-	@mkdir -p pkg/domain/mocks
 
 .PHONY: tools
 tools: ## Install development tools

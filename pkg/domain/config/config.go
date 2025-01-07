@@ -5,11 +5,12 @@
 package config
 
 import (
-	"context"
 	"time"
 
 	"github.com/damianoneill/go-bootstrap/pkg/domain/options"
 )
+
+//go:generate mockgen -destination=mocks/mock_config.go -package=mocks github.com/damianoneill/go-bootstrap/pkg/domain/config Store,Factory
 
 // Store defines the core configuration operations.
 // It provides type-safe access to configuration values and supports
@@ -57,15 +58,6 @@ type Store interface {
 	// Unmarshal decodes the entire config into a struct.
 	// The target must be a pointer to a struct.
 	Unmarshal(target interface{}) error
-}
-
-// Watcher provides support for monitoring configuration changes.
-type Watcher interface {
-	// Watch returns a channel that receives updates for the given key.
-	// The channel is closed when the context is canceled.
-	// The channel receives interface{} values which must be type asserted
-	// to the expected type.
-	Watch(ctx context.Context, key string) (<-chan interface{}, error)
 }
 
 // StoreOptions holds configuration for store implementations.

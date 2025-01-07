@@ -2,7 +2,6 @@
 package config
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -13,7 +12,7 @@ import (
 	domainconfig "github.com/damianoneill/go-bootstrap/pkg/domain/config"
 )
 
-// ViperStore implements the Store and Watcher interfaces using Viper
+// ViperStore implements the Store interface using Viper
 type ViperStore struct {
 	v  *viper.Viper
 	mu sync.RWMutex
@@ -163,32 +162,4 @@ func (s *ViperStore) Unmarshal(target interface{}) error {
 	defer s.mu.RUnlock()
 
 	return s.v.Unmarshal(target)
-}
-
-// Watch implements the Watcher interface
-func (s *ViperStore) Watch(ctx context.Context, key string) (<-chan interface{}, error) {
-	ch := make(chan interface{})
-
-	// Create internal channel for viper
-	viperCh := make(chan bool)
-	s.v.WatchConfig()
-
-	// Start goroutine to watch for changes
-	go func() {
-		defer close(ch)
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-viperCh:
-				// Send new value on change
-				if s.v.IsSet(key) {
-					ch <- s.v.Get(key)
-				}
-			}
-		}
-	}()
-
-	return ch, nil
 }
