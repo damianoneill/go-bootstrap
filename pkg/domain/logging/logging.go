@@ -11,6 +11,8 @@ import (
 	"github.com/damianoneill/go-bootstrap/pkg/domain/options"
 )
 
+//go:generate mockgen -destination=mocks/mock_logger.go -package=mocks github.com/damianoneill/go-bootstrap/pkg/domain/logging Logger,LeveledLogger
+
 // Level represents logging severity levels.
 type Level string
 
@@ -46,6 +48,20 @@ type LoggerOptions struct {
 
 // Option is a function that modifies LoggerOptions
 type Option = options.Option[LoggerOptions]
+
+// DefaultOptions returns the default logger options
+func DefaultOptions() LoggerOptions {
+	return LoggerOptions{
+		Level: InfoLevel,
+	}
+}
+
+// WithDefaults ensures options have proper default values
+func WithDefaults(opts *LoggerOptions) {
+	if opts.Level == "" {
+		opts.Level = InfoLevel
+	}
+}
 
 // WithLevel sets the minimum logging level.
 // Messages below this level will not be logged.

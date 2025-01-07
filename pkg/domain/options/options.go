@@ -19,6 +19,9 @@ type OptionFunc[T any] func(*T) error
 // ApplyOption implements the Option interface for OptionFunc.
 // It simply calls the function with the provided configuration object.
 func (f OptionFunc[T]) ApplyOption(o *T) error {
+	if f == nil {
+		return nil // Treat nil function as a no-op
+	}
 	return f(o)
 }
 
@@ -44,6 +47,9 @@ func (f OptionFunc[T]) ApplyOption(o *T) error {
 //	err := Apply(config, WithPort(8080))
 func Apply[T any](target *T, opts ...Option[T]) error {
 	for _, opt := range opts {
+		if opt == nil {
+			continue // Skip nil options
+		}
 		if err := opt.ApplyOption(target); err != nil {
 			return err
 		}

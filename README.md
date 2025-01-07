@@ -90,10 +90,6 @@ pkg/
 Complete examples are provided in the `examples/` directory:
 
 - `quickstart/`: Todo service showing core features
-- `config/`: Configuration management examples
-- `logging/`: Structured logging examples
-- `routing/`: HTTP routing examples
-- `tracing/`: OpenTelemetry tracing examples
 
 Run the quickstart example:
 
@@ -114,7 +110,6 @@ server:
 
 logging:
   level: info
-  format: json
 
 tracing:
   enabled: true
