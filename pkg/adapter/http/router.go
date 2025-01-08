@@ -14,13 +14,14 @@ import (
 
 	domainhttp "github.com/damianoneill/go-bootstrap/pkg/domain/http"
 	"github.com/damianoneill/go-bootstrap/pkg/domain/logging"
+	"github.com/damianoneill/go-bootstrap/pkg/domain/metrics"
 )
 
 // ChiRouter wraps chi.Router with additional service capabilities
 type ChiRouter struct {
 	chi.Router // Embed chi.Router to inherit HTTP routing
 	opts       domainhttp.RouterOptions
-	metrics    *metrics
+	metrics    metrics.Collector
 	matcher    *defaultMatcher
 }
 
@@ -51,11 +52,26 @@ func (f *Factory) NewRouter(opts ...domainhttp.Option) (domainhttp.Router, error
 		return nil, fmt.Errorf("service name is required")
 	}
 
+	// Create metrics collector
+	var metricsCollector metrics.Collector
+	if options.MetricsFactory != nil {
+		collector, err := options.MetricsFactory.NewCollector(
+			metrics.WithServiceName(options.ServiceName),
+			metrics.WithLabels(map[string]string{
+				"version": options.ServiceVersion,
+			}),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("creating metrics collector: %w", err)
+		}
+		metricsCollector = collector
+	}
+
 	// Create router instance
 	r := &ChiRouter{
 		Router:  chi.NewRouter(),
 		opts:    options,
-		metrics: newMetrics(options.ServiceName),
+		metrics: metricsCollector,
 		matcher: newMatcher(),
 	}
 
@@ -209,12 +225,12 @@ func (r *ChiRouter) tracingMiddleware() func(http.Handler) http.Handler {
 	}
 }
 
-// metricsMiddleware creates a middleware for metrics collection
+// Update metricsMiddleware to use the new collector
 func (r *ChiRouter) metricsMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			// Skip excluded paths
-			if r.matcher.Matches(req.URL.Path, r.opts.ExcludeFromLogging) {
+			// Skip if no metrics collector or excluded path
+			if r.metrics == nil || r.matcher.Matches(req.URL.Path, r.opts.ExcludeFromLogging) {
 				next.ServeHTTP(w, req)
 				return
 			}
@@ -226,7 +242,7 @@ func (r *ChiRouter) metricsMiddleware() func(http.Handler) http.Handler {
 			// Record metrics
 			path := r.normalizePath(req)
 			duration := time.Since(start).Seconds()
-			r.metrics.collectMetrics(req.Method, path, ww.Status(), duration)
+			r.metrics.CollectRequestMetrics(req.Method, path, ww.Status(), duration)
 		})
 	}
 }

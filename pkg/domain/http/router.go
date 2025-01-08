@@ -8,9 +8,12 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/damianoneill/go-bootstrap/pkg/domain/logging"
+	"github.com/damianoneill/go-bootstrap/pkg/domain/metrics"
 	"github.com/damianoneill/go-bootstrap/pkg/domain/options"
 	"github.com/damianoneill/go-bootstrap/pkg/domain/tracing"
 )
+
+//go:generate mockgen -destination=mocks/mock_router.go -package=http github.com/damianoneill/go-bootstrap/pkg/domain/http Router,Factory
 
 // Router extends chi.Router to provide additional service capabilities.
 // It inherits all standard HTTP routing functionality from chi while allowing
@@ -39,6 +42,10 @@ type RouterOptions struct {
 	// TracingProvider enables distributed tracing.
 	// If not set, tracing will be disabled.
 	TracingProvider tracing.Provider
+
+	// MetricsFactory creates a metrics collector for request metrics.
+	// If not set, metrics will be disabled
+	MetricsFactory metrics.Factory
 
 	// ProbeHandlers configures Kubernetes probe endpoints.
 	// If not set, default handlers returning healthy will be used.
@@ -86,6 +93,14 @@ func WithLogger(logger logging.Logger) Option {
 func WithTracingProvider(provider tracing.Provider) Option {
 	return options.OptionFunc[RouterOptions](func(o *RouterOptions) error {
 		o.TracingProvider = provider
+		return nil
+	})
+}
+
+// WithMetricsFactory sets the metrics factory for creating collectors
+func WithMetricsFactory(factory metrics.Factory) Option {
+	return options.OptionFunc[RouterOptions](func(o *RouterOptions) error {
+		o.MetricsFactory = factory
 		return nil
 	})
 }
