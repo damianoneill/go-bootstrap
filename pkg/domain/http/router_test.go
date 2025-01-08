@@ -1,131 +1,95 @@
 // pkg/domain/http/router_test.go
-package http_test
+package http
 
 import (
 	"testing"
 
-	http "github.com/damianoneill/go-bootstrap/pkg/domain/http"
-	"github.com/damianoneill/go-bootstrap/pkg/domain/logging"
-	"github.com/damianoneill/go-bootstrap/pkg/domain/tracing"
+	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
+
+	mocklog "github.com/damianoneill/go-bootstrap/pkg/domain/logging/mocks"
+	mocktracing "github.com/damianoneill/go-bootstrap/pkg/domain/tracing/mocks"
 )
 
-func defaultOptions() http.RouterOptions {
-	return http.RouterOptions{
-		ProbeHandlers: http.DefaultProbeHandlers(),
+func defaultOptions() RouterOptions {
+	return RouterOptions{
+		ProbeHandlers: DefaultProbeHandlers(),
 	}
 }
 
 func TestRouterOptions(t *testing.T) {
-	// Create test logger and tracer for tests
-	testLogger := &mockLogger{}
-	testTracer := &mockTracer{}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	testLogger := mocklog.NewMockLogger(ctrl)
+	testTracer := mocktracing.NewMockProvider(ctrl)
 
 	tests := []struct {
 		name     string
-		options  []http.Option
-		validate func(*testing.T, http.RouterOptions)
+		options  []Option
+		validate func(*testing.T, RouterOptions)
 		wantErr  bool
 	}{
 		{
 			name:    "default options",
-			options: []http.Option{},
-			validate: func(t *testing.T, got http.RouterOptions) {
-				if got.ServiceName != "" {
-					t.Errorf("ServiceName = %v, want empty", got.ServiceName)
-				}
-				if got.ServiceVersion != "" {
-					t.Errorf("ServiceVersion = %v, want empty", got.ServiceVersion)
-				}
-				if got.ProbeHandlers == nil {
-					t.Error("ProbeHandlers is nil, want default handlers")
-				}
+			options: []Option{},
+			validate: func(t *testing.T, got RouterOptions) {
+				assert.Empty(t, got.ServiceName)
+				assert.Empty(t, got.ServiceVersion)
+				assert.NotNil(t, got.ProbeHandlers)
 			},
 		},
 		{
 			name: "with service info",
-			options: []http.Option{
-				http.WithService("test-service", "1.0.0"),
+			options: []Option{
+				WithService("test-service", "1.0.0"),
 			},
-			validate: func(t *testing.T, got http.RouterOptions) {
-				if got.ServiceName != "test-service" {
-					t.Errorf("ServiceName = %v, want test-service", got.ServiceName)
-				}
-				if got.ServiceVersion != "1.0.0" {
-					t.Errorf("ServiceVersion = %v, want 1.0.0", got.ServiceVersion)
-				}
+			validate: func(t *testing.T, got RouterOptions) {
+				assert.Equal(t, "test-service", got.ServiceName)
+				assert.Equal(t, "1.0.0", got.ServiceVersion)
 			},
 		},
 		{
 			name: "with logger",
-			options: []http.Option{
-				http.WithLogger(testLogger),
+			options: []Option{
+				WithLogger(testLogger),
 			},
-			validate: func(t *testing.T, got http.RouterOptions) {
-				if got.Logger == nil {
-					t.Error("Logger is nil, want test logger")
-				}
+			validate: func(t *testing.T, got RouterOptions) {
+				assert.NotNil(t, got.Logger)
 			},
 		},
 		{
 			name: "with tracing provider",
-			options: []http.Option{
-				http.WithTracingProvider(testTracer),
+			options: []Option{
+				WithTracingProvider(testTracer),
 			},
-			validate: func(t *testing.T, got http.RouterOptions) {
-				if got.TracingProvider == nil {
-					t.Error("TracingProvider is nil, want test tracer")
-				}
+			validate: func(t *testing.T, got RouterOptions) {
+				assert.NotNil(t, got.TracingProvider)
 			},
 		},
 		{
 			name: "with probe handlers",
-			options: []http.Option{
-				http.WithProbeHandlers(http.DefaultProbeHandlers()),
+			options: []Option{
+				WithProbeHandlers(DefaultProbeHandlers()),
 			},
-			validate: func(t *testing.T, got http.RouterOptions) {
-				if got.ProbeHandlers == nil {
-					t.Error("ProbeHandlers is nil, want handlers")
-				}
-			},
-		},
-		{
-			name: "with observability exclusions",
-			options: []http.Option{
-				http.WithObservabilityExclusions(
-					[]string{"/health"},
-					[]string{"/metrics"},
-				),
-			},
-			validate: func(t *testing.T, got http.RouterOptions) {
-				if len(got.ExcludeFromLogging) != 1 || got.ExcludeFromLogging[0] != "/health" {
-					t.Errorf("ExcludeFromLogging = %v, want [/health]", got.ExcludeFromLogging)
-				}
-				if len(got.ExcludeFromTracing) != 1 || got.ExcludeFromTracing[0] != "/metrics" {
-					t.Errorf("ExcludeFromTracing = %v, want [/metrics]", got.ExcludeFromTracing)
-				}
+			validate: func(t *testing.T, got RouterOptions) {
+				assert.NotNil(t, got.ProbeHandlers)
 			},
 		},
 		{
 			name: "with multiple options",
-			options: []http.Option{
-				http.WithService("test-service", "1.0.0"),
-				http.WithLogger(testLogger),
-				http.WithTracingProvider(testTracer),
-				http.WithObservabilityExclusions([]string{"/health"}, []string{"/metrics"}),
+			options: []Option{
+				WithService("test-service", "1.0.0"),
+				WithLogger(testLogger),
+				WithTracingProvider(testTracer),
+				WithObservabilityExclusions([]string{"/health"}, []string{"/metrics"}),
 			},
-			validate: func(t *testing.T, got http.RouterOptions) {
-				if got.ServiceName != "test-service" {
-					t.Errorf("ServiceName = %v, want test-service", got.ServiceName)
-				}
-				if got.Logger == nil {
-					t.Error("Logger is nil, want test logger")
-				}
-				if got.TracingProvider == nil {
-					t.Error("TracingProvider is nil, want test tracer")
-				}
-				if len(got.ExcludeFromLogging) != 1 {
-					t.Errorf("ExcludeFromLogging length = %v, want 1", len(got.ExcludeFromLogging))
-				}
+			validate: func(t *testing.T, got RouterOptions) {
+				assert.Equal(t, "test-service", got.ServiceName)
+				assert.NotNil(t, got.Logger)
+				assert.NotNil(t, got.TracingProvider)
+				assert.Equal(t, []string{"/health"}, got.ExcludeFromLogging)
+				assert.Equal(t, []string{"/metrics"}, got.ExcludeFromTracing)
 			},
 		},
 	}
@@ -137,10 +101,11 @@ func TestRouterOptions(t *testing.T) {
 			// Apply options
 			for _, opt := range tt.options {
 				err := opt.ApplyOption(&opts)
-				if (err != nil) != tt.wantErr {
-					t.Errorf("ApplyOption() error = %v, wantErr %v", err, tt.wantErr)
+				if tt.wantErr {
+					assert.Error(t, err)
 					return
 				}
+				assert.NoError(t, err)
 			}
 
 			// Validate results
@@ -149,11 +114,128 @@ func TestRouterOptions(t *testing.T) {
 	}
 }
 
-// Mock implementations for testing
-type mockLogger struct {
-	logging.Logger
+func TestRouterOptionsValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		options []Option
+		wantErr string
+	}{
+		{
+			name: "empty service name",
+			options: []Option{
+				WithService("", "1.0.0"),
+			},
+			wantErr: "service name cannot be empty",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := RouterOptions{}
+			var err error
+			for _, opt := range tt.options {
+				if err = opt.ApplyOption(&opts); err != nil {
+					break
+				}
+			}
+			if tt.wantErr == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+			}
+		})
+	}
 }
 
-type mockTracer struct {
-	tracing.Provider
+func TestObservabilityExclusions(t *testing.T) {
+	tests := []struct {
+		name         string
+		loggingPaths []string
+		tracingPaths []string
+		validate     func(*testing.T, RouterOptions)
+		wantErr      string
+	}{
+		{
+			name:         "valid single path exclusions",
+			loggingPaths: []string{"/health"},
+			tracingPaths: []string{"/metrics"},
+			validate: func(t *testing.T, got RouterOptions) {
+				assert.Equal(t, []string{"/health"}, got.ExcludeFromLogging)
+				assert.Equal(t, []string{"/metrics"}, got.ExcludeFromTracing)
+			},
+		},
+		{
+			name:         "valid multiple paths",
+			loggingPaths: []string{"/health", "/metrics"},
+			tracingPaths: []string{"/ready", "/live"},
+			validate: func(t *testing.T, got RouterOptions) {
+				assert.Equal(t, []string{"/health", "/metrics"}, got.ExcludeFromLogging)
+				assert.Equal(t, []string{"/ready", "/live"}, got.ExcludeFromTracing)
+			},
+		},
+		{
+			name:         "path in both lists is valid",
+			loggingPaths: []string{"/health"},
+			tracingPaths: []string{"/health"},
+			validate: func(t *testing.T, got RouterOptions) {
+				assert.Equal(t, []string{"/health"}, got.ExcludeFromLogging)
+				assert.Equal(t, []string{"/health"}, got.ExcludeFromTracing)
+			},
+		},
+		{
+			name:         "empty paths are valid",
+			loggingPaths: []string{},
+			tracingPaths: []string{},
+			validate: func(t *testing.T, got RouterOptions) {
+				assert.Empty(t, got.ExcludeFromLogging)
+				assert.Empty(t, got.ExcludeFromTracing)
+			},
+		},
+		{
+			name: "nil paths are valid",
+			validate: func(t *testing.T, got RouterOptions) {
+				assert.Empty(t, got.ExcludeFromLogging)
+				assert.Empty(t, got.ExcludeFromTracing)
+			},
+		},
+		{
+			name:         "duplicate in logging paths",
+			loggingPaths: []string{"/health", "/health"},
+			wantErr:      "duplicate logging path: /health",
+		},
+		{
+			name:         "duplicate in tracing paths",
+			tracingPaths: []string{"/metrics", "/metrics"},
+			wantErr:      "duplicate tracing path: /metrics",
+		},
+		{
+			name:         "invalid logging path format",
+			loggingPaths: []string{"health"},
+			wantErr:      "path must start with /: health",
+		},
+		{
+			name:         "invalid tracing path format",
+			tracingPaths: []string{"metrics"},
+			wantErr:      "path must start with /: metrics",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := RouterOptions{}
+			err := WithObservabilityExclusions(tt.loggingPaths, tt.tracingPaths).ApplyOption(&opts)
+
+			if tt.wantErr != "" {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+
+			assert.NoError(t, err)
+			if tt.validate != nil {
+				tt.validate(t, opts)
+			}
+		})
+	}
 }

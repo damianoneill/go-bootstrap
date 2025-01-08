@@ -5,6 +5,9 @@
 package http
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/go-chi/chi/v5"
 
 	"github.com/damianoneill/go-bootstrap/pkg/domain/logging"
@@ -73,6 +76,9 @@ type Option = options.Option[RouterOptions]
 // The version should follow semantic versioning like "1.2.3".
 func WithService(name, version string) Option {
 	return options.OptionFunc[RouterOptions](func(o *RouterOptions) error {
+		if name == "" {
+			return fmt.Errorf("service name cannot be empty")
+		}
 		o.ServiceName = name
 		o.ServiceVersion = version
 		return nil
@@ -121,30 +127,32 @@ func WithProbeHandlers(handlers *ProbeHandlers) Option {
 // Paths should be exact matches like "/internal/health".
 func WithObservabilityExclusions(loggingPaths []string, tracingPaths []string) Option {
 	return options.OptionFunc[RouterOptions](func(o *RouterOptions) error {
+		// Validate logging paths
+		seen := make(map[string]bool)
+		for _, path := range loggingPaths {
+			if !strings.HasPrefix(path, "/") {
+				return fmt.Errorf("path must start with /: %s", path)
+			}
+			if seen[path] {
+				return fmt.Errorf("duplicate logging path: %s", path)
+			}
+			seen[path] = true
+		}
+
+		// Validate tracing paths
+		seen = make(map[string]bool)
+		for _, path := range tracingPaths {
+			if !strings.HasPrefix(path, "/") {
+				return fmt.Errorf("path must start with /: %s", path)
+			}
+			if seen[path] {
+				return fmt.Errorf("duplicate tracing path: %s", path)
+			}
+			seen[path] = true
+		}
+
 		o.ExcludeFromLogging = loggingPaths
 		o.ExcludeFromTracing = tracingPaths
-		return nil
-	})
-}
-
-// WithLoggingExclusions sets paths to exclude from request logging.
-// This is typically used for high-volume endpoints to reduce log noise.
-//
-// Paths should be exact matches like "/internal/health".
-func WithLoggingExclusions(paths []string) Option {
-	return options.OptionFunc[RouterOptions](func(o *RouterOptions) error {
-		o.ExcludeFromLogging = paths
-		return nil
-	})
-}
-
-// WithTracingExclusions sets paths to exclude from tracing.
-// This is typically used for health check endpoints or internal routes.
-//
-// Paths should be exact matches like "/internal/ready".
-func WithTracingExclusions(paths []string) Option {
-	return options.OptionFunc[RouterOptions](func(o *RouterOptions) error {
-		o.ExcludeFromTracing = paths
 		return nil
 	})
 }
