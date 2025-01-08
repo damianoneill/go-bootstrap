@@ -2,6 +2,7 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -17,12 +18,18 @@ import (
 	"github.com/damianoneill/go-bootstrap/pkg/domain/metrics"
 )
 
-// ChiRouter wraps chi.Router with additional service capabilities
-type ChiRouter struct {
-	chi.Router // Embed chi.Router to inherit HTTP routing
-	opts       domainhttp.RouterOptions
-	metrics    metrics.Collector
-	matcher    *defaultMatcher
+// Router implements the domain Router interface using Chi
+type Router struct {
+	chi.Router                   // Embed chi.Router for HTTP routing
+	opts       RouterOptions     // Configuration options
+	metrics    metrics.Collector // Metrics collector for instrumentation
+	matcher    *defaultMatcher   // Path matcher for exclusions
+}
+
+// RouterOptions contains the effective configuration for the router
+type RouterOptions struct {
+	domainhttp.RouterOptions
+	middleware []func(http.Handler) http.Handler // List of configured middleware
 }
 
 // Factory creates Chi-based router instances
@@ -52,7 +59,7 @@ func (f *Factory) NewRouter(opts ...domainhttp.Option) (domainhttp.Router, error
 		return nil, fmt.Errorf("service name is required")
 	}
 
-	// Create metrics collector
+	// Create metrics collector if metrics factory provided
 	var metricsCollector metrics.Collector
 	if options.MetricsFactory != nil {
 		collector, err := options.MetricsFactory.NewCollector(
@@ -67,108 +74,118 @@ func (f *Factory) NewRouter(opts ...domainhttp.Option) (domainhttp.Router, error
 		metricsCollector = collector
 	}
 
-	// Create router instance
-	r := &ChiRouter{
+	// Create and configure router
+	router, err := newRouter(options, metricsCollector)
+	if err != nil {
+		return nil, fmt.Errorf("creating router: %w", err)
+	}
+
+	return router, nil
+}
+
+// newRouter creates a new configured Router instance
+func newRouter(opts domainhttp.RouterOptions, collector metrics.Collector) (*Router, error) {
+	r := &Router{
 		Router:  chi.NewRouter(),
-		opts:    options,
-		metrics: metricsCollector,
+		opts:    RouterOptions{RouterOptions: opts},
+		metrics: collector,
 		matcher: newMatcher(),
 	}
 
-	// Configure router
-	if err := r.configure(); err != nil {
-		return nil, fmt.Errorf("configuring router: %w", err)
+	// Create and configure middleware
+	if err := r.configureMiddleware(); err != nil {
+		return nil, fmt.Errorf("configuring middleware: %w", err)
+	}
+
+	// Configure routes
+	if err := r.configureRoutes(); err != nil {
+		return nil, fmt.Errorf("configuring routes: %w", err)
 	}
 
 	return r, nil
 }
 
-// configure sets up middleware and routes
-func (r *ChiRouter) configure() error {
+// configureMiddleware sets up all middleware in the correct order
+func (r *Router) configureMiddleware() error {
 	// Add base middleware
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
-	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(30 * time.Second))
+	r.opts.middleware = append(r.opts.middleware,
+		middleware.RequestID,
+		middleware.RealIP,
+		middleware.Recoverer,
+		middleware.Timeout(30*time.Second),
+	)
 
-	// Add tracing first so it can set up the context
+	// Add tracing if configured
 	if r.opts.TracingProvider != nil {
-		r.Use(r.tracingMiddleware())
+		r.opts.middleware = append(r.opts.middleware, r.tracingMiddleware())
 	}
 
-	// Then add logging which will use the trace context
+	// Add logging if configured
 	if r.opts.Logger != nil {
-		r.Use(r.loggingMiddleware())
+		r.opts.middleware = append(r.opts.middleware, r.loggingMiddleware())
 	}
 
 	// Add metrics collection
-	r.Use(r.metricsMiddleware())
+	if r.metrics != nil {
+		r.opts.middleware = append(r.opts.middleware, r.metricsMiddleware())
+	}
 
-	// Configure internal routes
-	r.Mount("/internal", r.internalRouters())
-
-	// Add metrics endpoint
-	r.Handle("/metrics", promhttp.Handler())
+	// Apply all middleware
+	for _, mw := range r.opts.middleware {
+		r.Use(mw)
+	}
 
 	return nil
 }
 
-// internalRouters creates a router with probe endpoints
-func (r *ChiRouter) internalRouters() chi.Router {
+// configureRoutes sets up all routes including probe and metrics endpoints
+func (r *Router) configureRoutes() error {
+	// Configure internal routes
 	internal := chi.NewRouter()
 
-	internal.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
-		r.handleProbe(w, r.opts.ProbeHandlers.LivenessCheck())
-	})
+	// Health probe routes
+	internal.Get("/health", r.probeHandler(r.opts.ProbeHandlers.LivenessCheck))
+	internal.Get("/ready", r.probeHandler(r.opts.ProbeHandlers.ReadinessCheck))
+	internal.Get("/startup", r.probeHandler(r.opts.ProbeHandlers.StartupCheck))
 
-	internal.Get("/ready", func(w http.ResponseWriter, _ *http.Request) {
-		r.handleProbe(w, r.opts.ProbeHandlers.ReadinessCheck())
-	})
+	// Mount internal routes
+	r.Mount("/internal", internal)
 
-	internal.Get("/startup", func(w http.ResponseWriter, _ *http.Request) {
-		r.handleProbe(w, r.opts.ProbeHandlers.StartupCheck())
-	})
+	// Add metrics endpoint if collector configured
+	if r.metrics != nil {
+		r.Handle("/metrics", promhttp.Handler())
+	}
 
-	// Add logger config endpoint if logger supports runtime configuration
-	if r.opts.Logger != nil {
-		if configurable, ok := r.opts.Logger.(logging.RuntimeConfigurable); ok {
-			internal.Handle("/logging/config", configurable.GetConfigHandler())
+	return nil
+}
+
+// probeHandler creates a handler for probe endpoints
+func (r *Router) probeHandler(check domainhttp.ProbeCheck) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		resp := check()
+		if err := r.writeProbeResponse(w, resp); err != nil {
 			if r.opts.Logger != nil {
-				r.opts.Logger.InfoWith("Registered logger config endpoint", logging.Fields{
-					"path": "/internal/logging/config",
+				r.opts.Logger.ErrorWith("Failed to write probe response", logging.Fields{
+					"error": err.Error(),
 				})
 			}
 		}
 	}
-
-	return internal
 }
 
-// handleProbe writes a probe response with appropriate status code
-func (r *ChiRouter) handleProbe(w http.ResponseWriter, resp domainhttp.ProbeResponse) {
+// writeProbeResponse writes a probe response with appropriate status code
+func (r *Router) writeProbeResponse(w http.ResponseWriter, resp domainhttp.ProbeResponse) error {
 	w.Header().Set("Content-Type", "application/json")
 
 	if resp.Status != "ok" {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}
 
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		if r.opts.Logger != nil {
-			r.opts.Logger.ErrorWith("Failed to encode probe response", logging.Fields{
-				"error": err.Error(),
-			})
-		}
-		w.WriteHeader(http.StatusInternalServerError)
-		// Try to write a simple error response
-		if err := json.NewEncoder(w).Encode(map[string]string{"error": "internal server error"}); err != nil {
-			// If we can't even encode the error response, just give up
-			return
-		}
-	}
+	return json.NewEncoder(w).Encode(resp)
 }
 
 // loggingMiddleware creates a middleware for request logging
-func (r *ChiRouter) loggingMiddleware() func(http.Handler) http.Handler {
+func (r *Router) loggingMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			// Skip excluded paths
@@ -200,7 +217,7 @@ func (r *ChiRouter) loggingMiddleware() func(http.Handler) http.Handler {
 }
 
 // tracingMiddleware creates a middleware for request tracing
-func (r *ChiRouter) tracingMiddleware() func(http.Handler) http.Handler {
+func (r *Router) tracingMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			if r.matcher.Matches(req.URL.Path, r.opts.ExcludeFromTracing) {
@@ -211,13 +228,13 @@ func (r *ChiRouter) tracingMiddleware() func(http.Handler) http.Handler {
 			// Create operation name from request
 			operation := fmt.Sprintf("%s %s", req.Method, req.URL.Path)
 
-			// Use otelhttp with proper operation name and capture router options
-			opts := r.opts // capture options for use in formatter
+			// Use otelhttp with proper operation name
+			opts := r.opts // capture options for formatter
 			handler := otelhttp.NewHandler(
 				next,
 				operation,
-				otelhttp.WithSpanNameFormatter(func(operation string, req *http.Request) string {
-					return fmt.Sprintf("%s.http %s", opts.ServiceName, operation)
+				otelhttp.WithSpanNameFormatter(func(operation string, _ *http.Request) string {
+					return fmt.Sprintf("%s.http %s", opts.RouterOptions.ServiceName, operation)
 				}),
 			)
 			handler.ServeHTTP(w, req)
@@ -225,8 +242,8 @@ func (r *ChiRouter) tracingMiddleware() func(http.Handler) http.Handler {
 	}
 }
 
-// Update metricsMiddleware to use the new collector
-func (r *ChiRouter) metricsMiddleware() func(http.Handler) http.Handler {
+// metricsMiddleware creates a middleware for collecting request metrics
+func (r *Router) metricsMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			// Skip if no metrics collector or excluded path
@@ -240,17 +257,35 @@ func (r *ChiRouter) metricsMiddleware() func(http.Handler) http.Handler {
 			next.ServeHTTP(ww, req)
 
 			// Record metrics
-			path := r.normalizePath(req)
 			duration := time.Since(start).Seconds()
+			path := r.normalizePath(req)
 			r.metrics.CollectRequestMetrics(req.Method, path, ww.Status(), duration)
 		})
 	}
 }
 
-// normalizePath helps prevent high cardinality in metrics by normalizing dynamic path segments
-func (r *ChiRouter) normalizePath(req *http.Request) string {
+// normalizePath returns a normalized path for metrics collection
+func (r *Router) normalizePath(req *http.Request) string {
 	if rctx := chi.RouteContext(req.Context()); rctx != nil && rctx.RoutePattern() != "" {
 		return rctx.RoutePattern()
 	}
 	return req.URL.Path
+}
+
+// Close handles cleanup of router resources
+func (r *Router) Close(ctx context.Context) error {
+	var errs []error
+
+	// Close metrics collector if configured
+	if r.metrics != nil {
+		if err := r.metrics.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("closing metrics collector: %w", err))
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("closing router: %v", errs)
+	}
+
+	return nil
 }

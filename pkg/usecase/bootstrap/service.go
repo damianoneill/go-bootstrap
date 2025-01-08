@@ -11,16 +11,18 @@ import (
 	domainconfig "github.com/damianoneill/go-bootstrap/pkg/domain/config"
 	domainhttp "github.com/damianoneill/go-bootstrap/pkg/domain/http"
 	domainlog "github.com/damianoneill/go-bootstrap/pkg/domain/logging"
+	domainmetrics "github.com/damianoneill/go-bootstrap/pkg/domain/metrics"
 	domaintracing "github.com/damianoneill/go-bootstrap/pkg/domain/tracing"
 )
 
 // Dependencies contains all external dependencies required by the service.
 // This makes it easy to inject real or mock implementations for testing.
 type Dependencies struct {
-	ConfigFactory domainconfig.Factory
-	LoggerFactory domainlog.Factory
-	RouterFactory domainhttp.Factory
-	TracerFactory domaintracing.Factory
+	ConfigFactory  domainconfig.Factory
+	LoggerFactory  domainlog.Factory
+	RouterFactory  domainhttp.Factory
+	TracerFactory  domaintracing.Factory
+	MetricsFactory domainmetrics.Factory
 }
 
 // Service represents a bootstrapped application with core capabilities.
@@ -147,6 +149,12 @@ func (s *Service) initRouter(opts Options) error {
 			[]string{"/internal/*", "/metrics"},
 		),
 	}
+
+	// Add metrics factory if configured
+	if s.deps.MetricsFactory != nil {
+		routerOpts = append(routerOpts, domainhttp.WithMetricsFactory(s.deps.MetricsFactory))
+	}
+
 	if s.tracer != nil {
 		routerOpts = append(routerOpts, domainhttp.WithTracingProvider(s.tracer))
 	}

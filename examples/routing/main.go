@@ -13,6 +13,7 @@ import (
 
 	httpadapter "github.com/damianoneill/go-bootstrap/pkg/adapter/http"
 	"github.com/damianoneill/go-bootstrap/pkg/adapter/logging"
+	"github.com/damianoneill/go-bootstrap/pkg/adapter/metrics"
 	"github.com/damianoneill/go-bootstrap/pkg/adapter/tracing"
 	domainhttp "github.com/damianoneill/go-bootstrap/pkg/domain/http"
 	domainlog "github.com/damianoneill/go-bootstrap/pkg/domain/logging"
@@ -28,35 +29,35 @@ var (
 func printExampleRequests() {
 	fmt.Println("\n=== Business Endpoints (with tracing & logging) ===")
 	fmt.Println("# List users")
-	fmt.Println("curl -v http://localhost:8080/api/v1/users")
+	fmt.Println("curl  http://localhost:8080/api/v1/users")
 	fmt.Println("\n# Get user by ID")
-	fmt.Println("curl -v http://localhost:8080/api/v1/users/123")
+	fmt.Println("curl  http://localhost:8080/api/v1/users/123")
 	fmt.Println("\n# Create user")
-	fmt.Println(`curl -v -X POST -H "Content-Type: application/json" -d '{"name":"John Doe","email":"john@example.com"}' http://localhost:8080/api/v1/users`)
+	fmt.Println(`curl  -X POST -H "Content-Type: application/json" -d '{"name":"John Doe","email":"john@example.com"}' http://localhost:8080/api/v1/users`)
 	fmt.Println("\n# Get user profile (requires auth)")
-	fmt.Println(`curl -v -H "Authorization: Bearer token123" http://localhost:8080/api/v1/user/profile`)
+	fmt.Println(`curl  -H "Authorization: Bearer token123" http://localhost:8080/api/v1/user/profile`)
 
 	fmt.Println("\n=== Kubernetes Probe Endpoints (excluded from tracing & logging) ===")
 	fmt.Println("# Liveness probe")
-	fmt.Println("curl -v http://localhost:8080/internal/health")
+	fmt.Println("curl  http://localhost:8080/internal/health")
 	fmt.Println("\n# Readiness probe")
-	fmt.Println("curl -v http://localhost:8080/internal/ready")
+	fmt.Println("curl  http://localhost:8080/internal/ready")
 	fmt.Println("\n# Startup probe")
-	fmt.Println("curl -v http://localhost:8080/internal/startup")
+	fmt.Println("curl  http://localhost:8080/internal/startup")
 
 	fmt.Println("\n=== Logging Configuration Endpoint (if supported) ===")
 	fmt.Println("# Get current log level")
-	fmt.Println("curl -v http://localhost:8080/internal/logging/config")
+	fmt.Println("curl  http://localhost:8080/internal/logging/config")
 	fmt.Println("\n# Update log level")
-	fmt.Println(`curl -v -X PUT -H "Content-Type: application/json" -d '{"level":"debug"}' http://localhost:8080/internal/logging/config`)
+	fmt.Println(`curl  -X PUT -H "Content-Type: application/json" -d '{"level":"debug"}' http://localhost:8080/internal/logging/config`)
 
 	fmt.Println("\n=== Observability Endpoints (excluded from tracing & logging) ===")
 	fmt.Println("# Prometheus metrics")
-	fmt.Println("curl -v http://localhost:8080/metrics")
+	fmt.Println("curl  http://localhost:8080/metrics")
 
 	fmt.Println("\n=== Testing Trace Context Propagation ===")
 	fmt.Println("# Request with trace context")
-	fmt.Println("curl -v -H 'traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' http://localhost:8080/api/v1/users")
+	fmt.Println("curl  -H 'traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' http://localhost:8080/api/v1/users")
 
 	fmt.Println("\n=== OpenTelemetry Collector Configuration ===")
 	fmt.Println("# The service is configured to send traces to:")
@@ -138,6 +139,9 @@ func main() {
 }
 
 func setupRouter() (domainhttp.Router, error) {
+	// Create metrics factory
+	metricsFactory := metrics.NewMetricsFactory()
+
 	// Create tracer with HTTP exporter
 	tracingFactory := tracing.NewFactory()
 	tracingProvider, err := tracingFactory.NewProvider(
@@ -198,6 +202,7 @@ func setupRouter() (domainhttp.Router, error) {
 		// Observability setup
 		domainhttp.WithLogger(logger),
 		domainhttp.WithTracingProvider(tracingProvider),
+		domainhttp.WithMetricsFactory(metricsFactory),
 		// Probe configuration
 		domainhttp.WithProbeHandlers(probeHandlers),
 		// Observability exclusions

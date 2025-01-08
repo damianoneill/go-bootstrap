@@ -1,5 +1,5 @@
-// pkg/adapter/http/prometheus_test.go
-package http
+// pkg/adapter/metrics/prometheus_test.go
+package metrics
 
 import (
 	"testing"

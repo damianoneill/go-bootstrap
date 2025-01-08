@@ -16,6 +16,7 @@ import (
 	"github.com/damianoneill/go-bootstrap/pkg/adapter/config"
 	httpadapter "github.com/damianoneill/go-bootstrap/pkg/adapter/http"
 	"github.com/damianoneill/go-bootstrap/pkg/adapter/logging"
+	"github.com/damianoneill/go-bootstrap/pkg/adapter/metrics"
 	"github.com/damianoneill/go-bootstrap/pkg/adapter/tracing"
 	"github.com/damianoneill/go-bootstrap/pkg/usecase/bootstrap"
 )
@@ -30,10 +31,11 @@ type Todo struct {
 func main() {
 	// Create bootstrap dependencies
 	deps := bootstrap.Dependencies{
-		ConfigFactory: config.NewFactory(),
-		LoggerFactory: logging.NewFactory(),
-		RouterFactory: httpadapter.NewFactory(),
-		TracerFactory: tracing.NewFactory(),
+		ConfigFactory:  config.NewFactory(),
+		LoggerFactory:  logging.NewFactory(),
+		RouterFactory:  httpadapter.NewFactory(),
+		TracerFactory:  tracing.NewFactory(),
+		MetricsFactory: metrics.NewMetricsFactory(),
 	}
 
 	// Create bootstrap service

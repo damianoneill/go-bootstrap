@@ -1,5 +1,5 @@
-// pkg/adapter/http/prometheus.go
-package http
+// pkg/adapter/metrics/prometheus.go
+package metrics
 
 import (
 	"fmt"
