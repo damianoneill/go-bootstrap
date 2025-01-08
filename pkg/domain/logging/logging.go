@@ -11,7 +11,7 @@ import (
 	"github.com/damianoneill/go-bootstrap/pkg/domain/options"
 )
 
-//go:generate mockgen -destination=mocks/mock_logger.go -package=mocks github.com/damianoneill/go-bootstrap/pkg/domain/logging Logger,LeveledLogger
+//go:generate mockgen -destination=mocks/mock_logger.go -package=mocks github.com/damianoneill/go-bootstrap/pkg/domain/logging Logger,LeveledLogger,RuntimeConfigurable,Factory
 
 // Level represents logging severity levels.
 type Level string

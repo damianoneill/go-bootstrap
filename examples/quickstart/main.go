@@ -47,7 +47,7 @@ func main() {
 		LogLevel:    "info",
 		// Optional tracing - enable if collector is available
 		TracingEndpoint: os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
-	}, deps)
+	}, deps, nil) // No hooks needed for production use
 
 	if err != nil {
 		fmt.Printf("Failed to create service: %v\n", err)
