@@ -37,10 +37,13 @@ type Service struct {
 	server    *http.Server
 	deps      Dependencies
 	hooks     *ServerHooks // Optional test hooks
+	opts      Options
 }
 
-// NewService creates a new bootstrap service with optional test hooks
+// NewService creates a new bootstrap service with all domain capabilities
 func NewService(opts Options, deps Dependencies, hooks *ServerHooks) (*Service, error) {
+
+	// Validate and set option defaults
 	if err := validateOptions(&opts); err != nil {
 		return nil, fmt.Errorf("invalid options: %w", err)
 	}
@@ -49,22 +52,23 @@ func NewService(opts Options, deps Dependencies, hooks *ServerHooks) (*Service, 
 		deps:      deps,
 		startTime: time.Now(),
 		hooks:     hooks,
+		opts:      opts,
 	}
 
 	if err := svc.initConfig(opts); err != nil {
-		return nil, fmt.Errorf("init config: %w", err)
+		return nil, err
 	}
 
 	if err := svc.initLogger(opts); err != nil {
-		return nil, fmt.Errorf("init logger: %w", err)
+		return nil, err
 	}
 
 	if err := svc.initTracing(opts); err != nil {
-		return nil, fmt.Errorf("init tracing: %w", err)
+		return nil, err
 	}
 
 	if err := svc.initRouter(opts); err != nil {
-		return nil, fmt.Errorf("init router: %w", err)
+		return nil, err
 	}
 
 	return svc, nil
@@ -133,6 +137,10 @@ func (s *Service) Start() error {
 func (s *Service) Shutdown(ctx context.Context) error {
 	s.logger.Info("Starting graceful shutdown")
 
+	// Create timeout context using configured shutdown timeout
+	ctx, cancel := context.WithTimeout(ctx, s.opts.ShutdownTimeout)
+	defer cancel()
+
 	// Use test hook if provided, otherwise use standard Shutdown
 	shutdown := s.server.Shutdown
 	if s.hooks != nil && s.hooks.Shutdown != nil {
@@ -180,32 +188,30 @@ func validateOptions(opts *Options) error {
 		return fmt.Errorf("service name is required")
 	}
 
+	// Set defaults
 	if opts.Version == "" {
 		opts.Version = "dev"
 	}
-
 	if opts.EnvPrefix == "" {
 		opts.EnvPrefix = opts.ServiceName
 	}
-
 	if opts.LogLevel == "" {
 		opts.LogLevel = domainlog.InfoLevel
 	}
-
 	if opts.ShutdownTimeout == 0 {
 		opts.ShutdownTimeout = 15 * time.Second
 	}
-
 	if opts.ReadTimeout == 0 {
 		opts.ReadTimeout = 15 * time.Second
 	}
-
 	if opts.WriteTimeout == 0 {
 		opts.WriteTimeout = 15 * time.Second
 	}
-
 	if opts.Port == 0 {
 		opts.Port = 8080
+	}
+	if opts.TracingSampleRate == 0 {
+		opts.TracingSampleRate = 1.0
 	}
 
 	return nil

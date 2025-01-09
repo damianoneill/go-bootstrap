@@ -45,13 +45,37 @@ func main() {
 
     // Create service
     svc, err := bootstrap.NewService(bootstrap.Options{
+        // Service Identity
         ServiceName: "my-service",
         Version:     "1.0.0",
+
+        // Configuration
+        ConfigFile:  "config.yaml",
         EnvPrefix:   "MY_SVC",
+
+        // Logging
+        LogLevel:    logging.InfoLevel,
+        LogFields: logging.Fields{
+            "environment": "dev",
+            "region":     "us-west",
+        },
+        EnableLogConfig: true,  // Enable runtime log level configuration
+
+        // HTTP Server
+        Port:            8080,
+        ReadTimeout:     15 * time.Second,
+        WriteTimeout:    15 * time.Second,
+        ShutdownTimeout: 15 * time.Second,
+
+        // Observability
+        ExcludeFromLogging: []string{"/internal/*", "/metrics"},
+        ExcludeFromTracing: []string{"/internal/*", "/metrics"},
+
+        // Tracing
+        TracingEndpoint:    "localhost:4317",
+        TracingSampleRate:  1.0,
+        TracingPropagators: []string{"tracecontext", "baggage"},
     }, deps)
-    if err != nil {
-        panic(err)
-    }
 
     // Add routes
     router := svc.Router()
@@ -107,14 +131,22 @@ server:
     port: 8080
     read_timeout: 15s
     write_timeout: 15s
+    shutdown_timeout: 15s
 
 logging:
   level: info
+  fields:
+    environment: "dev"
+    region: "us-west"
+
+observability:
+  exclude_from_logging: ["/health/*", "/metrics"]
+  exclude_from_tracing: ["/health/*", "/metrics"]
 
 tracing:
-  enabled: true
-  endpoint: localhost:4317
+  endpoint: "localhost:4317"
   sample_rate: 1.0
+  propagators: ["tracecontext", "baggage"]
 ```
 
 Environment variables override YAML config:

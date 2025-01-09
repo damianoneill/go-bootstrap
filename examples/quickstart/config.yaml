@@ -8,8 +8,15 @@ server:
 
 logging:
   level: info
+  fields:
+    environment: "dev"
+    component: "todo-service"
+
+observability:
+  exclude_from_logging: ["/internal/*", "/metrics"]
+  exclude_from_tracing: ["/internal/*", "/metrics"]
 
 tracing:
-  enabled: false
-  endpoint: "" # Set via OTEL_EXPORTER_OTLP_ENDPOINT
+  endpoint: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
   sample_rate: 1.0
+  propagators: ["tracecontext", "baggage"]

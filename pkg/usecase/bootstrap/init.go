@@ -19,6 +19,7 @@ func (s *Service) initConfig(opts Options) error {
 			"server.http.read_timeout":  opts.ReadTimeout,
 			"server.http.write_timeout": opts.WriteTimeout,
 			"logging.level":             string(opts.LogLevel),
+			"tracing.sample_rate":       opts.TracingSampleRate,
 		}),
 	}
 	if opts.ConfigFile != "" {
@@ -34,16 +35,27 @@ func (s *Service) initConfig(opts Options) error {
 }
 
 func (s *Service) initLogger(opts Options) error {
+	// Build default fields
+	fields := domainlog.Fields{
+		"version": opts.Version,
+	}
+
+	// Merge user-provided fields if present
+	if opts.LogFields != nil {
+		for k, v := range opts.LogFields {
+			fields[k] = v
+		}
+	}
+
 	logger, err := s.deps.LoggerFactory.NewLogger(
 		domainlog.WithLevel(opts.LogLevel),
 		domainlog.WithServiceName(opts.ServiceName),
-		domainlog.WithFields(domainlog.Fields{
-			"version": opts.Version,
-		}),
+		domainlog.WithFields(fields),
 	)
 	if err != nil {
 		return fmt.Errorf("creating logger: %w", err)
 	}
+
 	s.logger = logger
 	return nil
 }
@@ -53,15 +65,23 @@ func (s *Service) initTracing(opts Options) error {
 		return nil
 	}
 
-	provider, err := s.deps.TracerFactory.NewProvider(
+	tracingOpts := []domaintracing.Option{
 		domaintracing.WithServiceName(opts.ServiceName),
 		domaintracing.WithServiceVersion(opts.Version),
 		domaintracing.WithCollectorEndpoint(opts.TracingEndpoint),
-		domaintracing.WithExporterType(domaintracing.GRPCExporter),
+		domaintracing.WithSamplingRate(opts.TracingSampleRate),
 		domaintracing.WithInsecure(true),
-		domaintracing.WithSamplingRate(1.0),
-		domaintracing.WithDefaultPropagators(),
-	)
+	}
+
+	if len(opts.TracingPropagators) > 0 {
+		tracingOpts = append(tracingOpts,
+			domaintracing.WithPropagatorTypes(opts.TracingPropagators))
+	} else {
+		tracingOpts = append(tracingOpts,
+			domaintracing.WithDefaultPropagators())
+	}
+
+	provider, err := s.deps.TracerFactory.NewProvider(tracingOpts...)
 	if err != nil {
 		return fmt.Errorf("creating tracer: %w", err)
 	}
@@ -70,24 +90,44 @@ func (s *Service) initTracing(opts Options) error {
 }
 
 func (s *Service) initRouter(opts Options) error {
-	probeHandlers := s.createProbeHandlers(opts)
+	probeHandlers := opts.ProbeHandlers
+	if probeHandlers == nil {
+		probeHandlers = s.createProbeHandlers(opts)
+	}
+
 	routerOpts := []domainhttp.Option{
 		domainhttp.WithService(opts.ServiceName, opts.Version),
 		domainhttp.WithLogger(s.logger),
 		domainhttp.WithProbeHandlers(probeHandlers),
-		domainhttp.WithObservabilityExclusions(
-			[]string{"/internal/*", "/metrics"},
-			[]string{"/internal/*", "/metrics"},
-		),
 	}
+
+	// Default paths to exclude from observability if none specified
+	excludeFromLogging := []string{"/internal/*", "/metrics"}
+	excludeFromTracing := []string{"/internal/*", "/metrics"}
+
+	// Override with user-specified paths if provided
+	if len(opts.ExcludeFromLogging) > 0 {
+		excludeFromLogging = opts.ExcludeFromLogging
+	}
+	if len(opts.ExcludeFromTracing) > 0 {
+		excludeFromTracing = opts.ExcludeFromTracing
+	}
+
+	routerOpts = append(routerOpts,
+		domainhttp.WithObservabilityExclusions(
+			excludeFromLogging,
+			excludeFromTracing,
+		))
 
 	// Add metrics factory if configured
 	if s.deps.MetricsFactory != nil {
-		routerOpts = append(routerOpts, domainhttp.WithMetricsFactory(s.deps.MetricsFactory))
+		routerOpts = append(routerOpts,
+			domainhttp.WithMetricsFactory(s.deps.MetricsFactory))
 	}
 
 	if s.tracer != nil {
-		routerOpts = append(routerOpts, domainhttp.WithTracingProvider(s.tracer))
+		routerOpts = append(routerOpts,
+			domainhttp.WithTracingProvider(s.tracer))
 	}
 
 	router, err := s.deps.RouterFactory.NewRouter(routerOpts...)
@@ -96,12 +136,13 @@ func (s *Service) initRouter(opts Options) error {
 	}
 	s.router = router
 
-	// Add logger config endpoint if supported
-	if configurable, ok := s.logger.(domainlog.RuntimeConfigurable); ok {
-		router.Mount("/internal/logging", configurable.GetConfigHandler())
-		s.logger.InfoWith("Registered logger config endpoint", domainlog.Fields{
-			"path": "/internal/logging",
-		})
+	// Add logger config endpoint if enabled
+	if opts.EnableLogConfig {
+		if configurable, ok := s.logger.(domainlog.RuntimeConfigurable); ok {
+			router.Mount("/internal/logging", configurable.GetConfigHandler())
+			s.logger.InfoWith("Registered logger config endpoint",
+				domainlog.Fields{"path": "/internal/logging"})
+		}
 	}
 
 	return nil

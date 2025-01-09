@@ -18,6 +18,7 @@ import (
 	"github.com/damianoneill/go-bootstrap/pkg/adapter/logging"
 	"github.com/damianoneill/go-bootstrap/pkg/adapter/metrics"
 	"github.com/damianoneill/go-bootstrap/pkg/adapter/tracing"
+	domainlog "github.com/damianoneill/go-bootstrap/pkg/domain/logging"
 	"github.com/damianoneill/go-bootstrap/pkg/usecase/bootstrap"
 )
 
@@ -42,11 +43,30 @@ func main() {
 	svc, err := bootstrap.NewService(bootstrap.Options{
 		ServiceName: "todo-service",
 		Version:     "1.0.0",
+		ConfigFile:  "examples/quickstart/config.yaml",
 		EnvPrefix:   "TODO_SVC",
-		Port:        8080,
-		LogLevel:    "info",
-		// Optional tracing - enable if collector is available
-		TracingEndpoint: os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+
+		// Enhanced logging
+		LogLevel: domainlog.InfoLevel,
+		LogFields: domainlog.Fields{
+			"environment": "dev",
+			"component":   "todo-service",
+		},
+		EnableLogConfig: true,
+
+		// Server timeouts
+		ReadTimeout:     15 * time.Second,
+		WriteTimeout:    15 * time.Second,
+		ShutdownTimeout: 15 * time.Second,
+
+		// Observability exclusions
+		ExcludeFromLogging: []string{"/internal/*", "/metrics"},
+		ExcludeFromTracing: []string{"/internal/*", "/metrics"},
+
+		// Tracing configuration
+		TracingEndpoint:    os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+		TracingSampleRate:  1.0,
+		TracingPropagators: []string{"tracecontext", "baggage"},
 	}, deps, nil) // No hooks needed for production use
 
 	if err != nil {
