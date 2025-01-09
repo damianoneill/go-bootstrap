@@ -136,7 +136,7 @@ func main() {
 		ExcludeFromLogging: []string{"/internal/*", "/metrics"},
 		ExcludeFromTracing: []string{"/internal/*", "/metrics"},
 
-		// Custom probe handlers
+		// Custom probe handlers, if not set default handlers will be used
 		ProbeHandlers: probe.createProbeHandlers(),
 
 		// Tracing configuration

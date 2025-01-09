@@ -113,7 +113,7 @@ tidy: ## Tidy and verify go modules
 .PHONY: vuln
 vuln: ## Check for vulnerabilities
 	@echo "Checking for vulnerabilities..."
-	@$(GOBIN)/govulncheck ./...
+	@$(GOBIN)/govulncheck -show verbose ./...
 
 .PHONY: version
 version: ## Display version information

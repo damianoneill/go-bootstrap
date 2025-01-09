@@ -211,4 +211,11 @@ This project is inspired by:
 
 ##  TODO List
 
-- [ ] Create a endpoint on the router for seeing the current configuration.  Need to consider sensitive data for example passwords.
+- [ ] Create a /internal endpoint in the router for viewing the running configuration, should be configurable whether this is enabled or not.
+  - Need to consider sensitive data for example passwords.
+- [ ] Security Considerations, what should be handled by the bootstrap vs the application? What should be bootstrap configuration vs application configuration?
+  - [ ] Consider CORS.
+  - [ ] Consider CSRF.
+  - [ ] Consider Rate Limiting.
+  - [ ] Consider TLS.
+- [ ] Create integration tests.
