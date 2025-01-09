@@ -208,3 +208,7 @@ This project is inspired by:
 - Clean Architecture principles
 - Domain-Driven Design patterns
 - Cloud Native Computing Foundation guidelines
+
+##  TODO List
+
+- [ ] Create a endpoint on the router for seeing the current configuration.  Need to consider sensitive data for example passwords.
