@@ -10,7 +10,7 @@ import (
 	"github.com/damianoneill/go-bootstrap/pkg/domain/options"
 )
 
-//go:generate mockgen -destination=mocks/mock_config.go -package=mocks github.com/damianoneill/go-bootstrap/pkg/domain/config Store,Factory
+//go:generate mockgen -destination=mocks/mock_config.go -package=mocks github.com/damianoneill/go-bootstrap/pkg/domain/config Store,MaskedStore,Factory
 
 // Store defines the core configuration operations.
 // It provides type-safe access to configuration values and supports
@@ -108,5 +108,5 @@ type Factory interface {
 	// NewStore creates a new configuration store with the given options.
 	// The returned store will be ready to use but may need ReadConfig()
 	// called to load values.
-	NewStore(opts ...Option) (Store, error)
+	NewStore(opts ...Option) (MaskedStore, error)
 }

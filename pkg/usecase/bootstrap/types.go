@@ -29,9 +29,10 @@ type Options struct {
 	Version     string
 
 	// Configuration
-	ConfigFile     string
-	EnvPrefix      string
-	ConfigDefaults map[string]interface{}
+	ConfigFile         string
+	EnvPrefix          string
+	ConfigDefaults     map[string]interface{}
+	EnableConfigViewer bool
 
 	// Logging
 	LogLevel        logging.Level

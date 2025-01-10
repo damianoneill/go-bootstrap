@@ -26,7 +26,7 @@ import (
 
 type testDeps struct {
 	configFactory  *configmocks.MockFactory
-	configStore    *configmocks.MockStore
+	configStore    *configmocks.MockMaskedStore
 	loggerFactory  *logmocks.MockFactory
 	logger         *logmocks.MockLeveledLogger
 	routerFactory  *httpmocks.MockFactory
@@ -43,7 +43,7 @@ func newTestDeps(t *testing.T) *testDeps {
 	d := &testDeps{
 		ctrl:           ctrl,
 		configFactory:  configmocks.NewMockFactory(ctrl),
-		configStore:    configmocks.NewMockStore(ctrl),
+		configStore:    configmocks.NewMockMaskedStore(ctrl),
 		loggerFactory:  logmocks.NewMockFactory(ctrl),
 		logger:         logmocks.NewMockLeveledLogger(ctrl),
 		routerFactory:  httpmocks.NewMockFactory(ctrl),
@@ -57,8 +57,11 @@ func newTestDeps(t *testing.T) *testDeps {
 }
 
 func (d *testDeps) setupBasicMockExpectations(allowPort bool) {
-	// Keep only config expectations here
-	d.configFactory.EXPECT().NewStore(gomock.Any()).Return(d.configStore, nil).AnyTimes()
+	// Update mock expectations to use MaskedStore
+	d.configFactory.EXPECT().
+		NewStore(gomock.Any()).
+		Return(d.configStore, nil).
+		AnyTimes()
 
 	// Common config expectations - skip port if not allowed
 	if allowPort {
@@ -66,6 +69,16 @@ func (d *testDeps) setupBasicMockExpectations(allowPort bool) {
 	}
 	d.configStore.EXPECT().GetDuration("server.http.read_timeout").Return(15*time.Second, true).AnyTimes()
 	d.configStore.EXPECT().GetDuration("server.http.write_timeout").Return(15*time.Second, true).AnyTimes()
+
+	// Add expectations for config viewing if enabled
+	d.configStore.EXPECT().
+		GetConfigHandler(gomock.Any()).
+		Return(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})).
+		AnyTimes()
+	d.configStore.EXPECT().
+		GetMaskedConfig(gomock.Any()).
+		Return(make(map[string]interface{}), nil).
+		AnyTimes()
 }
 
 func (d *testDeps) setupLoggerExpectations() {

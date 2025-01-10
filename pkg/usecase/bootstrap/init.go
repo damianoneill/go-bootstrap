@@ -145,5 +145,19 @@ func (s *Service) initRouter(opts Options) error {
 		}
 	}
 
+	// Add config endpoint if enabled and store supports masking
+	if opts.EnableConfigViewer {
+		if maskedStore, ok := s.config.(domainconfig.MaskedStore); ok {
+			// Create config viewing endpoint with default mask strategy
+			strategy := &domainconfig.DefaultMaskStrategy{
+				SensitiveKeys: []string{"password", "secret", "key", "token", "credential"},
+				MaskPattern:   "******",
+			}
+			router.Mount("/internal/config", maskedStore.GetConfigHandler(strategy))
+			s.logger.InfoWith("Registered config viewing endpoint",
+				domainlog.Fields{"path": "/internal/config"})
+		}
+	}
+
 	return nil
 }

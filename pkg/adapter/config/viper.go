@@ -2,7 +2,9 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -11,6 +13,73 @@ import (
 
 	domainconfig "github.com/damianoneill/go-bootstrap/pkg/domain/config"
 )
+
+// Verify interface implementation
+var _ domainconfig.MaskedStore = (*ViperStore)(nil)
+
+func (s *ViperStore) GetConfigHandler(maskStrategy domainconfig.MaskStrategy) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		config, err := s.GetMaskedConfig(maskStrategy)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(config); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	})
+}
+
+func (s *ViperStore) GetMaskedConfig(maskStrategy domainconfig.MaskStrategy) (map[string]interface{}, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Get all settings as a map
+	allSettings := s.v.AllSettings()
+
+	if maskStrategy == nil {
+		// Use default strategy if none provided
+		maskStrategy = &domainconfig.DefaultMaskStrategy{
+			SensitiveKeys: []string{"password", "secret", "key", "token", "credential"},
+			MaskPattern:   "******",
+		}
+	}
+
+	// Recursively mask sensitive values
+	masked := maskConfigMap("", allSettings, maskStrategy)
+	return masked, nil
+}
+
+// Apply MaskStrategy to a config map recursively
+func maskConfigMap(prefix string, config map[string]interface{}, strategy domainconfig.MaskStrategy) map[string]interface{} {
+	result := make(map[string]interface{})
+
+	for k, v := range config {
+		fullKey := k
+		if prefix != "" {
+			fullKey = prefix + "." + k
+		}
+
+		switch val := v.(type) {
+		case map[string]interface{}:
+			// Recurse into nested maps
+			result[k] = maskConfigMap(fullKey, val, strategy)
+		default:
+			// Mask leaf values that match sensitive patterns
+			result[k] = strategy.MaskValue(fullKey, v)
+		}
+	}
+
+	return result
+}
 
 // ViperStore implements the Store interface using Viper
 type ViperStore struct {
@@ -25,7 +94,7 @@ func NewFactory() *Factory {
 	return &Factory{}
 }
 
-func (f *Factory) NewStore(opts ...domainconfig.Option) (domainconfig.Store, error) {
+func (f *Factory) NewStore(opts ...domainconfig.Option) (domainconfig.MaskedStore, error) {
 	options := domainconfig.StoreOptions{}
 	for _, opt := range opts {
 		if err := opt.ApplyOption(&options); err != nil {

@@ -114,10 +114,11 @@ func main() {
 
 	// Create bootstrap service
 	svc, err := bootstrap.NewService(bootstrap.Options{
-		ServiceName: "todo-service",
-		Version:     "1.0.0",
-		ConfigFile:  "examples/quickstart/config.yaml",
-		EnvPrefix:   "TODO_SVC",
+		ServiceName:        "todo-service",
+		Version:            "1.0.0",
+		ConfigFile:         "examples/quickstart/config.yaml",
+		EnvPrefix:          "TODO_SVC",
+		EnableConfigViewer: true,
 
 		// Enhanced logging
 		LogLevel: domainlog.InfoLevel,
