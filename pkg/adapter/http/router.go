@@ -107,27 +107,50 @@ func newRouter(opts domainhttp.RouterOptions, collector metrics.Collector) (*Rou
 
 // configureMiddleware sets up all middleware in the correct order
 func (r *Router) configureMiddleware() error {
-	// Add base middleware
-	r.opts.middleware = append(r.opts.middleware,
-		middleware.RequestID,
-		middleware.RealIP,
-		middleware.Recoverer,
-		middleware.Timeout(30*time.Second),
-	)
-
-	// Add tracing if configured
-	if r.opts.TracingProvider != nil {
-		r.opts.middleware = append(r.opts.middleware, r.tracingMiddleware())
+	// Define default ordering if none provided
+	ordering := r.opts.MiddlewareOrdering
+	if ordering == nil {
+		ordering = &domainhttp.MiddlewareOrdering{
+			Order: []domainhttp.MiddlewareCategory{
+				domainhttp.CoreMiddleware,          // First
+				domainhttp.SecurityMiddleware,      // Second
+				domainhttp.ApplicationMiddleware,   // Third
+				domainhttp.ObservabilityMiddleware, // Last
+			},
+		}
 	}
 
-	// Add logging if configured
-	if r.opts.Logger != nil {
-		r.opts.middleware = append(r.opts.middleware, r.loggingMiddleware())
+	// Categorize built-in middleware
+	middlewareByCategory := map[domainhttp.MiddlewareCategory][]func(http.Handler) http.Handler{
+		domainhttp.CoreMiddleware: {
+			middleware.RequestID,
+			middleware.RealIP,
+			middleware.Recoverer,
+			middleware.Timeout(30 * time.Second),
+		},
+		domainhttp.SecurityMiddleware: {
+			middleware.StripSlashes, // URL normalization for security
+			middleware.RedirectSlashes,
+			r.securityHeadersMiddleware(), // New middleware for basic security headers
+		},
+		domainhttp.ObservabilityMiddleware: r.getObservabilityMiddleware(),
 	}
 
-	// Add metrics collection
-	if r.metrics != nil {
-		r.opts.middleware = append(r.opts.middleware, r.metricsMiddleware())
+	// Merge custom middleware
+	if ordering.CustomMiddleware != nil {
+		for category, handlers := range ordering.CustomMiddleware {
+			middlewareByCategory[category] = append(
+				middlewareByCategory[category],
+				handlers...,
+			)
+		}
+	}
+
+	// Apply middleware in configured order
+	for _, category := range ordering.Order {
+		for _, mw := range middlewareByCategory[category] {
+			r.Use(mw)
+		}
 	}
 
 	// Apply all middleware
@@ -136,6 +159,23 @@ func (r *Router) configureMiddleware() error {
 	}
 
 	return nil
+}
+
+// Helper to get observability middleware in correct order
+func (r *Router) getObservabilityMiddleware() []func(http.Handler) http.Handler {
+	var middleware []func(http.Handler) http.Handler
+
+	if r.opts.TracingProvider != nil {
+		middleware = append(middleware, r.tracingMiddleware())
+	}
+	if r.opts.Logger != nil {
+		middleware = append(middleware, r.loggingMiddleware())
+	}
+	if r.metrics != nil {
+		middleware = append(middleware, r.metricsMiddleware())
+	}
+
+	return middleware
 }
 
 // configureRoutes sets up all routes including probe and metrics endpoints
@@ -260,6 +300,20 @@ func (r *Router) metricsMiddleware() func(http.Handler) http.Handler {
 			duration := time.Since(start).Seconds()
 			path := r.normalizePath(req)
 			r.metrics.CollectRequestMetrics(req.Method, path, ww.Status(), duration)
+		})
+	}
+}
+
+// Add basic security headers middleware
+func (r *Router) securityHeadersMiddleware() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			// Basic security headers
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			w.Header().Set("X-Frame-Options", "DENY")
+			w.Header().Set("X-XSS-Protection", "1; mode=block")
+
+			next.ServeHTTP(w, req)
 		})
 	}
 }

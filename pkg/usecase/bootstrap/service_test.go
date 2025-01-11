@@ -69,6 +69,10 @@ func (d *testDeps) setupBasicMockExpectations(allowPort bool) {
 	}
 	d.configStore.EXPECT().GetDuration("server.http.read_timeout").Return(15*time.Second, true).AnyTimes()
 	d.configStore.EXPECT().GetDuration("server.http.write_timeout").Return(15*time.Second, true).AnyTimes()
+	d.configStore.EXPECT().GetDuration("server.http.idle_timeout").Return(60*time.Second, true).AnyTimes()
+	d.configStore.EXPECT().GetDuration("server.http.shutdown_timeout").Return(15*time.Second, true).AnyTimes()
+	d.configStore.EXPECT().GetInt("server.http.max_header_size").Return(1<<20, true).AnyTimes()
+	d.configStore.EXPECT().GetBool("server.tls.enabled").Return(false, true).AnyTimes()
 
 	// Add expectations for config viewing if enabled
 	d.configStore.EXPECT().
@@ -345,9 +349,11 @@ func TestService_Lifecycle(t *testing.T) {
 		{
 			name: "shutdown respects configured timeout",
 			opts: bootstrap.Options{
-				ServiceName:     "test-service",
-				Version:         "1.0.0",
-				ShutdownTimeout: 5 * time.Second,
+				ServiceName: "test-service",
+				Version:     "1.0.0",
+				Server: bootstrap.ServerOptions{
+					ShutdownTimeout: 5 * time.Second,
+				},
 			},
 			setup: func(d *testDeps) {
 				d.setupBasicMockExpectations(true)

@@ -3,6 +3,8 @@
 package bootstrap
 
 import (
+	"crypto/tls"
+	"net/http"
 	"time"
 
 	domainconfig "github.com/damianoneill/go-bootstrap/pkg/domain/config"
@@ -20,6 +22,23 @@ type Dependencies struct {
 	RouterFactory  domainhttp.Factory
 	TracerFactory  domaintracing.Factory
 	MetricsFactory domainmetrics.Factory
+}
+type ServerOptions struct {
+	// Current options
+	Port            int
+	ReadTimeout     time.Duration
+	WriteTimeout    time.Duration
+	ShutdownTimeout time.Duration
+
+	// New security options
+	TLSConfig     *tls.Config
+	TLSCertFile   string
+	TLSKeyFile    string
+	MaxHeaderSize int
+	IdleTimeout   time.Duration
+
+	// Server customization
+	PreStart func(*http.Server) error
 }
 
 // Options configures the bootstrap service.
@@ -40,10 +59,10 @@ type Options struct {
 	EnableLogConfig bool // Whether to mount runtime log config endpoint
 
 	// HTTP Server
-	Port            int
-	ReadTimeout     time.Duration
-	WriteTimeout    time.Duration
-	ShutdownTimeout time.Duration
+	Server ServerOptions
+
+	// Router Configuration
+	Router domainhttp.RouterOptions
 
 	// Router/Observability
 	ExcludeFromLogging []string

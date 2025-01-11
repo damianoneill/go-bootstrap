@@ -52,6 +52,7 @@ func main() {
         // Configuration
         ConfigFile:  "config.yaml",
         EnvPrefix:   "MY_SVC",
+        EnableConfigViewer: true,  // Enable /internal/config endpoint, runtime config viewer
 
         // Logging
         LogLevel:    logging.InfoLevel,
@@ -59,7 +60,7 @@ func main() {
             "environment": "dev",
             "region":     "us-west",
         },
-        EnableLogConfig: true,  // Enable runtime log level configuration
+        EnableLogConfig: true,  // Enable /internal/logging/config, runtime log level configuration
 
         // HTTP Server
         Port:            8080,
@@ -172,6 +173,82 @@ Prometheus metrics are exposed at `/metrics` including:
 - Error counts
 - Custom metrics support
 
+### HTTP Server Configuration
+
+The library provides flexible HTTP server configuration through two key features:
+
+1. **Expanded Server Options**: The `ServerOptions` struct provides comprehensive server configuration including:
+   - Basic settings (port, timeouts)
+   - Security options (TLS configuration, certificates)
+   - Advanced HTTP tuning (max header size, idle timeout)
+
+```go
+svc, err := bootstrap.NewService(bootstrap.Options{
+    Server: bootstrap.ServerOptions{
+        Port:          8443,
+        TLSConfig:     tlsConfig,
+        TLSCertFile:   "certs/server.crt",
+        TLSKeyFile:    "certs/server.key",
+        MaxHeaderSize: 1 << 20,  // 1MB
+        IdleTimeout:   60 * time.Second,
+    },
+})
+```
+
+2. **Server Pre-Start Hook**: Applications can customize the `http.Server` before it starts:
+
+```go
+Server: bootstrap.ServerOptions{
+    PreStart: func(srv *http.Server) error {
+        // Customize server before startup
+        srv.ErrorLog = log.New(os.Stderr, "[server-error] ", log.LstdFlags)
+        return nil
+    },
+}
+```
+
+### Middleware Ordering
+
+The library introduces a structured approach to middleware organization and ordering:
+
+1. **Middleware Categories**: Middleware is now organized into well-defined categories:
+   - Core: Fundamental HTTP handling (request ID, recovery, timeouts)
+   - Security: Protection (auth, CORS, security headers)
+   - Application: Business logic
+   - Observability: Logging, metrics, tracing
+
+2. **Configurable Order**: Applications can control middleware execution order:
+
+```go
+router, err := bootstrap.NewService(bootstrap.Options{
+    Router: domainhttp.RouterOptions{
+        MiddlewareOrdering: &domainhttp.MiddlewareOrdering{
+            Order: []domainhttp.MiddlewareCategory{
+                domainhttp.SecurityMiddleware,   // Run security first
+                domainhttp.CoreMiddleware,
+                domainhttp.ApplicationMiddleware,
+                domainhttp.ObservabilityMiddleware,
+            },
+            CustomMiddleware: map[domainhttp.MiddlewareCategory][]func(http.Handler) http.Handler{
+                domainhttp.SecurityMiddleware: {
+                    myAuthMiddleware,
+                    myCORSMiddleware,
+                },
+            },
+        },
+    },
+})
+```
+
+The default middleware order prioritizes security and maintains proper observability:
+
+1. Core (fundamental HTTP handling)
+2. Security (protection)
+3. Application (business logic)
+4. Observability (monitoring)
+
+See the [server-customization](./examples/server-customization/main.go) example for a complete demonstration of these features.
+
 ## Development
 
 Requirements:
@@ -216,4 +293,59 @@ This project is inspired by:
   - [ ] Consider CSRF.
   - [ ] Consider Rate Limiting.
   - [ ] Consider TLS.
+- [ ] Update unit tests.
 - [ ] Create integration tests.
+
+##  Security Considerations
+
+The general principle should be:
+
+1. Bootstrap should provide secure defaults and infrastructure
+2. Applications should be able to customize security settings for their specific needs
+3. Some security features should be mandatory, while others optional
+
+Let's analyze each security consideration:
+
+1. CORS (Cross-Origin Resource Sharing):
+
+- Bootstrap's responsibility:
+  - Provide middleware infrastructure for CORS handling
+  - Default secure CORS policy (deny all)
+  - Standard CORS configuration options structure
+- Application's responsibility:
+  - Configure allowed origins/methods/headers
+  - Handle any special CORS requirements
+  - Override CORS behavior for specific routes if needed
+
+2. CSRF (Cross-Site Request Forgery):
+
+- Bootstrap's responsibility:
+  - CSRF token generation and validation middleware
+  - Secure session handling
+  - Standard configuration for token names/headers
+- Application's responsibility:
+  - Enable/disable CSRF for specific routes
+  - Configure token expiration
+  - Handle CSRF errors
+
+3. Rate Limiting:
+
+- Bootstrap's responsibility:
+  - Rate limiting middleware infrastructure
+  - Different rate limiting strategies (token bucket, sliding window etc.)
+  - Default limits for common scenarios
+- Application's responsibility:
+  - Configure rate limits for different endpoints
+  - Custom rate limiting rules
+  - Handle rate limit exceeded errors
+
+4. TLS:
+
+- Bootstrap's responsibility:
+  - TLS configuration infrastructure
+  - Secure TLS defaults (modern ciphers, TLS 1.2+)
+  - Certificate loading/rotation
+- Application's responsibility:
+  - Provide certificates
+  - Configure specific TLS requirements
+  - Handle TLS errors

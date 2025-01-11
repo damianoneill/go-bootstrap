@@ -6,6 +6,7 @@ package http
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -17,6 +18,43 @@ import (
 )
 
 //go:generate mockgen -destination=mocks/mock_router.go -package=http github.com/damianoneill/go-bootstrap/pkg/domain/http Router,Factory
+
+// MiddlewareCategory represents a classification of middleware
+type MiddlewareCategory string
+
+const (
+	// CoreMiddleware runs first - handles fundamental HTTP concerns like
+	// request IDs, panic recovery, and base timeouts
+	CoreMiddleware MiddlewareCategory = "core"
+
+	// SecurityMiddleware runs second - handles authentication, authorization,
+	// CORS, CSRF, rate limiting
+	SecurityMiddleware MiddlewareCategory = "security"
+
+	// ApplicationMiddleware runs third - handles custom business logic
+	// and application-specific concerns
+	ApplicationMiddleware MiddlewareCategory = "application"
+
+	// ObservabilityMiddleware runs last - handles logging, metrics,
+	// and tracing of the complete request lifecycle
+	ObservabilityMiddleware MiddlewareCategory = "observability"
+)
+
+// MiddlewareOrdering configures the order of middleware categories
+type MiddlewareOrdering struct {
+	// Order specifies the sequence of middleware categories
+	// If empty, defaults to [Core, Security, Application, Observability]
+	Order []MiddlewareCategory
+	// CustomMiddleware allows adding middleware to specific categories
+	CustomMiddleware map[MiddlewareCategory][]func(http.Handler) http.Handler
+}
+
+// requiredCategories defines the middleware categories that must be present
+var requiredCategories = map[MiddlewareCategory]struct{}{
+	CoreMiddleware:          {},
+	SecurityMiddleware:      {},
+	ObservabilityMiddleware: {},
+}
 
 // Router extends chi.Router to provide additional service capabilities.
 // It inherits all standard HTTP routing functionality from chi while allowing
@@ -63,6 +101,10 @@ type RouterOptions struct {
 	// Typically used for health check endpoints or internal routes.
 	// Paths should be exact matches like "/internal/ready".
 	ExcludeFromTracing []string
+
+	// MiddlewareOrdering configures middleware ordering
+	// If not set, defaults to [Core, Security, Application, Observability]
+	MiddlewareOrdering *MiddlewareOrdering
 }
 
 // Option is a function that modifies RouterOptions following the
@@ -153,6 +195,66 @@ func WithObservabilityExclusions(loggingPaths []string, tracingPaths []string) O
 
 		o.ExcludeFromLogging = loggingPaths
 		o.ExcludeFromTracing = tracingPaths
+		return nil
+	})
+}
+
+// validateMiddlewareOrdering ensures all required categories are present
+func validateMiddlewareOrdering(order []MiddlewareCategory) error {
+	if len(order) == 0 {
+		return fmt.Errorf("middleware order cannot be empty")
+	}
+
+	// Track which categories we've seen
+	seen := make(map[MiddlewareCategory]bool)
+
+	// Check for duplicates and build seen set
+	for _, category := range order {
+		if seen[category] {
+			return fmt.Errorf("duplicate middleware category: %s", category)
+		}
+		seen[category] = true
+	}
+
+	// Check that all required categories are present
+	var missing []string
+	for required := range requiredCategories {
+		if !seen[required] {
+			missing = append(missing, string(required))
+		}
+	}
+
+	if len(missing) > 0 {
+		return fmt.Errorf("missing required middleware categories: %s", strings.Join(missing, ", "))
+	}
+
+	return nil
+}
+
+// WithMiddlewareOrdering sets the order of middleware categories
+func WithMiddlewareOrdering(ordering *MiddlewareOrdering) Option {
+	return options.OptionFunc[RouterOptions](func(o *RouterOptions) error {
+		if ordering == nil {
+			return fmt.Errorf("middleware ordering cannot be nil")
+		}
+
+		// Validate the ordering includes all required categories
+		if err := validateMiddlewareOrdering(ordering.Order); err != nil {
+			return fmt.Errorf("invalid middleware ordering: %w", err)
+		}
+
+		// Validate custom middleware if provided
+		if ordering.CustomMiddleware != nil {
+			for category := range ordering.CustomMiddleware {
+				// Check that custom middleware is only added to valid categories
+				if _, validCategory := requiredCategories[category]; !validCategory &&
+					category != ApplicationMiddleware {
+					return fmt.Errorf("invalid middleware category for custom middleware: %s", category)
+				}
+			}
+		}
+
+		o.MiddlewareOrdering = ordering
 		return nil
 	})
 }

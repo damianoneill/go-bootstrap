@@ -15,11 +15,14 @@ func (s *Service) initConfig(opts Options) error {
 	cfgOpts := []domainconfig.Option{
 		domainconfig.WithEnvPrefix(opts.EnvPrefix),
 		domainconfig.WithDefaults(map[string]interface{}{
-			"server.http.port":          opts.Port,
-			"server.http.read_timeout":  opts.ReadTimeout,
-			"server.http.write_timeout": opts.WriteTimeout,
-			"logging.level":             string(opts.LogLevel),
-			"tracing.sample_rate":       opts.TracingSampleRate,
+			"server.http.port":            opts.Server.Port,
+			"server.http.read_timeout":    opts.Server.ReadTimeout,
+			"server.http.write_timeout":   opts.Server.WriteTimeout,
+			"server.http.idle_timeout":    opts.Server.IdleTimeout,
+			"server.http.max_header_size": opts.Server.MaxHeaderSize,
+			"server.tls.enabled":          opts.Server.TLSConfig != nil,
+			"server.tls.cert_file":        opts.Server.TLSCertFile,
+			"server.tls.key_file":         opts.Server.TLSKeyFile,
 		}),
 	}
 	if opts.ConfigFile != "" {
@@ -95,6 +98,7 @@ func (s *Service) initRouter(opts Options) error {
 		probeHandlers = s.createProbeHandlers(opts)
 	}
 
+	// Build up our router options slice
 	routerOpts := []domainhttp.Option{
 		domainhttp.WithService(opts.ServiceName, opts.Version),
 		domainhttp.WithLogger(s.logger),
@@ -128,6 +132,12 @@ func (s *Service) initRouter(opts Options) error {
 	if s.tracer != nil {
 		routerOpts = append(routerOpts,
 			domainhttp.WithTracingProvider(s.tracer))
+	}
+
+	// If user provided middleware ordering, add it
+	if opts.Router.MiddlewareOrdering != nil {
+		routerOpts = append(routerOpts,
+			domainhttp.WithMiddlewareOrdering(opts.Router.MiddlewareOrdering))
 	}
 
 	router, err := s.deps.RouterFactory.NewRouter(routerOpts...)

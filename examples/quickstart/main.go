@@ -128,10 +128,13 @@ func main() {
 		},
 		EnableLogConfig: true,
 
-		// Server timeouts
-		ReadTimeout:     15 * time.Second,
-		WriteTimeout:    15 * time.Second,
-		ShutdownTimeout: 15 * time.Second,
+		// HTTP Server
+		Server: bootstrap.ServerOptions{
+			Port:            8080,
+			ReadTimeout:     15 * time.Second,
+			WriteTimeout:    15 * time.Second,
+			ShutdownTimeout: 15 * time.Second,
+		},
 
 		// Observability exclusions
 		ExcludeFromLogging: []string{"/internal/*", "/metrics"},

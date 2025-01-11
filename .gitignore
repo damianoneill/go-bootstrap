@@ -24,3 +24,17 @@ go.work.sum
 # env file
 .env
 dist
+
+# Generated certificates
+examples/server-customization/certs/
+*.crt
+*.key
+*.csr
+*.srl
+
+# IDE specific
+.idea/
+.vscode/
+
+# OS specific
+.DS_Store
